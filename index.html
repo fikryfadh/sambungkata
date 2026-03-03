@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KBBI Lookup</title>
+
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+    background:#000;
+    color:#fff;
+    font-family:monospace;
+    display:flex;
+    justify-content:center;
+    align-items:flex-start;
+    min-height:100vh;
+    padding-top:60px;
+}
+
+.container {
+    width:100%;
+    max-width:1400px;
+    padding:50px;
+}
+
+h1 {
+    margin-bottom:30px;
+    font-size:36px;
+    letter-spacing:3px;
+    text-align:center;
+}
+
+.search-row {
+    display:flex;
+    gap:10px;
+    margin-bottom:20px;
+}
+
+#search {
+    flex:1;
+    padding:20px;
+    background:#111;
+    border:2px solid #444;
+    color:#fff;
+    font-size:22px;
+    outline:none;
+}
+
+#search:focus { border-color:#fff; }
+
+#modeToggle {
+    padding:0 30px;
+    background:#fff;
+    color:#000;
+    border:none;
+    font-weight:bold;
+    cursor:pointer;
+    font-size:16px;
+}
+
+/* TOGGLE BAR */
+.toggle-bar {
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+    gap:12px;
+    margin-bottom:25px;
+}
+
+.toggle-btn {
+    padding:16px 0;
+    border:2px solid #444;
+    background:#111;
+    color:#888;
+    cursor:pointer;
+    font-size:18px;
+    text-align:center;
+}
+
+.toggle-btn.active {
+    background:#00ff66;
+    color:#000;
+    border-color:#00ff66;
+    font-weight:bold;
+}
+
+/* GOLD BUTTON */
+.toggle-btn.gold-toggle.active {
+    background:gold;
+    color:#000;
+    border-color:gold;
+}
+
+/* RESULT GRID */
+.result {
+    padding:25px;
+    background:#111;
+    border:1px solid #333;
+    font-size:20px;
+    min-height:350px;
+    max-height:600px;
+    overflow-y:auto;
+
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+}
+
+/* WORD ITEM */
+.word {
+    padding:14px 10px;
+    border-bottom:1px solid #333;
+    border-right:1px solid #222;
+}
+
+.word:nth-child(5n) { border-right:none; }
+
+.word:hover { background:#1a1a1a; }
+
+.no-vowel {
+    color:gold;
+    font-weight:bold;
+}
+
+/* LETTER PARTITION */
+.letter-partition {
+    grid-column: 1 / -1;
+    border-top: 1px solid #555;
+    margin: 6px 0;
+    padding-top: 4px;
+    font-weight: normal;
+    color: #777;
+    font-size: 14px;
+    letter-spacing: 2px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+    <h1>KBBI Lookup</h1>
+
+    <div class="search-row">
+        <input type="text" id="search" placeholder="Type to search..." autofocus>
+        <button id="modeToggle">START</button>
+    </div>
+
+    <div class="toggle-bar" id="toggleBar"></div>
+
+    <div class="result" id="result">
+        Start typing...
+    </div>
+</div>
+
+<script>
+let words = [];
+let mode = "start";
+
+const suffixes = [
+    "x","ex","ks","if","tif",
+    "sme","ah","ao","oa","ia","eo","ai",
+    "oh","eh"
+];
+
+let activeSuffixes = new Set();
+let goldPriority = false;
+
+/* Load words */
+fetch('kbbi.txt')
+  .then(res => res.text())
+  .then(text => {
+    words = text
+      .split('\n')
+      .map(w => w.trim().toLowerCase())
+      .filter(w => /^[a-zA-Z]+$/.test(w));
+  });
+
+const input = document.getElementById('search');
+const result = document.getElementById('result');
+const toggleBtn = document.getElementById('modeToggle');
+const toggleBar = document.getElementById('toggleBar');
+
+/* GOLD TOGGLE */
+const goldBtn = document.createElement('div');
+goldBtn.className = 'toggle-btn gold-toggle';
+goldBtn.textContent = 'NO VOWEL';
+
+goldBtn.addEventListener('click', () => {
+    goldPriority = !goldPriority;
+    goldBtn.classList.toggle('active');
+    performSearch();
+});
+
+toggleBar.appendChild(goldBtn);
+
+/* SUFFIX TOGGLES */
+suffixes.forEach(suffix => {
+    const btn = document.createElement('div');
+    btn.className = 'toggle-btn';
+    btn.textContent = suffix.toUpperCase();
+
+    btn.addEventListener('click', () => {
+        if (activeSuffixes.has(suffix)) {
+            activeSuffixes.delete(suffix);
+            btn.classList.remove('active');
+        } else {
+            activeSuffixes.add(suffix);
+            btn.classList.add('active');
+        }
+        performSearch();
+    });
+
+    toggleBar.appendChild(btn);
+});
+
+toggleBtn.addEventListener('click', () => {
+    mode = (mode === "start") ? "end" : "start";
+    toggleBtn.textContent = mode.toUpperCase();
+    performSearch();
+});
+
+/* Helpers */
+function isNoVowel(word) {
+    return !/[aiueo]/.test(word);
+}
+
+function matchesActiveSuffix(word) {
+    for (let suffix of activeSuffixes) {
+        if (word.endsWith(suffix)) return true;
+    }
+    return false;
+}
+
+/* Main Search */
+function performSearch() {
+    const query = input.value.toLowerCase();
+    result.innerHTML = '';
+
+    if (query.length < 1) {
+        result.innerHTML = "Start typing...";
+        return;
+    }
+
+    let filtered = mode === "start"
+        ? words.filter(w => w.startsWith(query))
+        : words.filter(w => w.endsWith(query));
+
+    if (filtered.length === 0) {
+        result.innerHTML = "No result.";
+        return;
+    }
+
+    filtered.sort();
+
+    let goldWords = goldPriority ? filtered.filter(isNoVowel) : [];
+    let suffixWords = filtered.filter(w =>
+        (!goldPriority || !isNoVowel(w)) && matchesActiveSuffix(w)
+    );
+    let normal = filtered.filter(w =>
+        (!goldPriority || !isNoVowel(w)) && !matchesActiveSuffix(w)
+    );
+
+    filtered = [...goldWords, ...suffixWords, ...normal];
+
+    let lastLetter = null;
+
+    filtered.slice(0, 300).forEach(word => {
+
+        const firstLetter = word.charAt(0);
+
+        if (firstLetter !== lastLetter) {
+            const partition = document.createElement('div');
+            partition.className = 'letter-partition';
+            partition.textContent = firstLetter.toUpperCase();
+            result.appendChild(partition);
+            lastLetter = firstLetter;
+        }
+
+        const div = document.createElement('div');
+        div.className = 'word';
+
+        if (goldPriority && isNoVowel(word)) {
+            div.classList.add('no-vowel');
+        }
+
+        div.textContent = word;
+        result.appendChild(div);
+    });
+}
+
+input.addEventListener('input', performSearch);
+</script>
+
+</body>
+</html>
